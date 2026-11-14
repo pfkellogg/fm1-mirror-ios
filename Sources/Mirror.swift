@@ -281,7 +281,7 @@ final class Mirror: ObservableObject {
         let scale = CGFloat(Codec.smoothScale)
         let big = CIImage(cgImage: plain).clampedToExtent()
             .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1])
-            .applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 2.0, kCIInputIntensityKey: 0.8])
+            .applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 1.0, kCIInputIntensityKey: 2.6])
         let out = CGRect(x: 0, y: 0, width: CGFloat(size) * scale, height: CGFloat(size) * scale)
         return ci.createCGImage(big, from: out)
     }
