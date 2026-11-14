@@ -69,13 +69,13 @@ struct ContentView: View {
         VStack(spacing: 14) {
             switch mirror.state {
             case .noFm1:
-                Text("No FM-1 yet").font(.title.bold()).foregroundColor(Spyglass.brassLight)
+                Text("No FM-1 yet").font(.largeTitle.bold()).foregroundColor(Spyglass.brassLight)
                 Text("Plug the FM-1 in with its USB cable (an iPad with Lightning needs Apple's USB 3 Camera Adapter), or connect it over Bluetooth.")
                     .multilineTextAlignment(.center)
                 Button { bluetooth = true } label: { Label("Bluetooth…", systemImage: "dot.radiowaves.left.and.right") }
                     .buttonStyle(.borderedProminent).tint(Spyglass.brass)
             case .waiting(let name):
-                Text("FM-1 found").font(.title.bold()).foregroundColor(Spyglass.brassLight)
+                Text("FM-1 found").font(.largeTitle.bold()).foregroundColor(Spyglass.brassLight)
                 Text("\(name)\(mirror.firmware.map { " · \($0)" } ?? "")").foregroundColor(.secondary)
                 Text("It isn't sending its screen. That needs a Big Screen firmware on the FM-1 (see FM-1 Mirror's page on GitHub). The spyglass works with any firmware.")
                     .multilineTextAlignment(.center)
@@ -83,6 +83,7 @@ struct ContentView: View {
                 ProgressView()
             }
         }
+        .font(.title3)
         .foregroundColor(.white)
         .padding(28)
     }
@@ -98,15 +99,23 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Button { bluetooth = true } label: { Label("Bluetooth", systemImage: "dot.radiowaves.left.and.right") }
             Menu {
+                Picker("Keys", selection: $mirror.keysChoice) {
+                    Text("Auto (the first keyboard)").tag("auto")
+                    Text("Off").tag("off")
+                    ForEach(mirror.keyboards, id: \.self) { Text($0).tag($0) }
+                }
+            } label: { Label("Keys: " + (mirror.keyboard ?? "none"), systemImage: "pianokeys").lineLimit(1) }
+            Menu {
                 Picker("Look", selection: $mirror.lookName) {
                     ForEach(Codec.Look.allCases) { Text($0.rawValue).tag($0.rawValue) }
                 }
-            } label: { Label(mirror.look.rawValue, systemImage: "paintpalette") }
+            } label: { Label(mirror.look.rawValue, systemImage: "paintpalette").lineLimit(1).fixedSize() }
             Toggle(isOn: $mirror.smooth) { Text("Smooth") }.toggleStyle(.button)
             Toggle(isOn: $spyglassOn) { Text("Spyglass") }.toggleStyle(.button)
             Spacer(minLength: 4)
-            Text(status).font(.footnote).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
+            Text(status).font(.callout.weight(.medium)).foregroundColor(.white.opacity(0.85)).lineLimit(1).truncationMode(.middle)
         }
+        .font(.body.weight(.semibold))
         .tint(Spyglass.brassLight)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

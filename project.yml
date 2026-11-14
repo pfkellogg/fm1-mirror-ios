@@ -13,7 +13,10 @@ targets:
   FM1Mirror:
     type: application
     platform: iOS
-    sources: [Sources, Resources]
+    sources:
+      - Sources
+      - path: Resources
+        excludes: ["Debug-Info.plist"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pfkellogg.fm1-mirror-ios
@@ -29,3 +32,6 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown"
         INFOPLIST_KEY_UIRequiresFullScreen: NO
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+      configs:
+        Debug:
+          INFOPLIST_FILE: Resources/Debug-Info.plist   # merged with the generated one: background audio for Demo.swift

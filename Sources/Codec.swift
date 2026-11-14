@@ -115,73 +115,8 @@ enum Codec {
         }
     }
 
-    // ---- Smooth: Scale2x twice, then a light 1-2-1 blur (the same as the desktop app's smooth.rs)
-
+    /// Smooth: how many times bigger the picture is made (Mirror.render: Lanczos and an unsharp mask).
     static let smoothScale = 4
-
-    private static func scale2x(_ src: [UInt32], _ size: Int) -> [UInt32] {
-        let out = size * 2
-        return [UInt32](unsafeUninitializedCapacity: out * out) { o, count in
-            src.withUnsafeBufferPointer { s in
-                for y in 0..<size {
-                    let up = max(y - 1, 0) * size, down = min(y + 1, size - 1) * size, row = y * size
-                    for x in 0..<size {
-                        let e = s[row + x], b = s[up + x], h = s[down + x]
-                        let d = s[row + max(x - 1, 0)], f = s[row + min(x + 1, size - 1)]
-                        var e0 = e, e1 = e, e2 = e, e3 = e
-                        if b != h && d != f {
-                            if d == b { e0 = d }
-                            if b == f { e1 = f }
-                            if d == h { e2 = d }
-                            if h == f { e3 = f }
-                        }
-                        let i = y * 2 * out + x * 2
-                        o[i] = e0; o[i + 1] = e1; o[i + out] = e2; o[i + out + 1] = e3
-                    }
-                }
-            }
-            count = out * out
-        }
-    }
-
-    /// A 1-2-1 blur across and down, on opaque 0xAARRGGBB.
-    private static func soften(_ src: [UInt32], _ size: Int) -> [UInt32] {
-        let n = size * size
-        var across = [UInt16](repeating: 0, count: n * 3)
-        across.withUnsafeMutableBufferPointer { a in
-            src.withUnsafeBufferPointer { s in
-                for y in 0..<size {
-                    let row = y * size
-                    for x in 0..<size {
-                        let l = s[row + max(x - 1, 0)], m = s[row + x], r = s[row + min(x + 1, size - 1)]
-                        let i = (row + x) * 3
-                        a[i] = UInt16((l >> 16) & 255) + 2 * UInt16((m >> 16) & 255) + UInt16((r >> 16) & 255)
-                        a[i + 1] = UInt16((l >> 8) & 255) + 2 * UInt16((m >> 8) & 255) + UInt16((r >> 8) & 255)
-                        a[i + 2] = UInt16(l & 255) + 2 * UInt16(m & 255) + UInt16(r & 255)
-                    }
-                }
-            }
-        }
-        return [UInt32](unsafeUninitializedCapacity: n) { o, count in
-            across.withUnsafeBufferPointer { a in
-                for y in 0..<size {
-                    let up = max(y - 1, 0) * size, down = min(y + 1, size - 1) * size, row = y * size
-                    for x in 0..<size {
-                        let ia = (up + x) * 3, im = (row + x) * 3, id = (down + x) * 3
-                        let r = (UInt32(a[ia]) + 2 * UInt32(a[im]) + UInt32(a[id]) + 8) >> 4
-                        let g = (UInt32(a[ia + 1]) + 2 * UInt32(a[im + 1]) + UInt32(a[id + 1]) + 8) >> 4
-                        let b = (UInt32(a[ia + 2]) + 2 * UInt32(a[im + 2]) + UInt32(a[id + 2]) + 8) >> 4
-                        o[row + x] = 0xFF00_0000 | r << 16 | g << 8 | b
-                    }
-                }
-            }
-            count = n
-        }
-    }
-
-    static func smooth(_ argb: [UInt32], _ size: Int) -> [UInt32] {
-        soften(scale2x(scale2x(argb, size), size * 2), size * smoothScale)
-    }
 }
 
 /// SysEx out of a byte stream that may arrive in pieces.

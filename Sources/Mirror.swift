@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import CoreMIDI
 import Foundation
 import SwiftUI
@@ -24,15 +25,21 @@ final class Mirror: ObservableObject {
 
     @AppStorage("look") var lookName = Codec.Look.color.rawValue { didSet { redraw() } }
     @AppStorage("smooth") var smooth = true { didSet { redraw() } }
+    /// The keyboard that plays the FM-1 through this app: "auto" (the first that isn't an FM-1), "off", or its name.
+    @AppStorage("keys") var keysChoice = "auto" { didSet { scan(force: true) } }
+    /// Keyboards (MIDI sources that aren't an FM-1) and the one playing it now.
+    @Published private(set) var keyboards: [String] = []
+    @Published private(set) var keyboard: String?
     var look: Codec.Look { Codec.Look(rawValue: lookName) ?? .color }
 
     private var pixels = [UInt16](repeating: 0, count: Codec.size * Codec.size)
     private var dirty = false
-    private var lastRow = Date.distantPast
     private var client = MIDIClientRef()
     private var inPort = MIDIPortRef()
     private var outPort = MIDIPortRef()
     private var sources: [MIDIEndpointRef] = []
+    private var keysSource: MIDIEndpointRef = 0
+    private let bridge = Bridge()
     private var destinations: [MIDIEndpointRef] = []
     private var portName = ""
     private var helloCount = 0
@@ -47,13 +54,16 @@ final class Mirror: ObservableObject {
         MIDIClientCreateWithBlock("FM-1 Mirror" as CFString, &client) { [weak self] _ in
             Task { @MainActor in self?.scan() }       // something was plugged in, paired or let go
         }
-        let receiver = Receiver()
-        MIDIInputPortCreateWithProtocol(client, "from FM-1" as CFString, ._1_0, &inPort) { list, _ in
-            let parsed = receiver.parse(list)
+        let receiver = Receiver(), bridge = self.bridge
+        MIDIOutputPortCreate(client, "to FM-1" as CFString, &outPort)
+        bridge.outPort = outPort
+        MIDIInputPortCreateWithProtocol(client, "from FM-1 and the keys" as CFString, ._1_0, &inPort) { list, refCon in
+            let fromKeys = refCon == Mirror.keysTag
+            if fromKeys { bridge.forward(list) }            // straight on to the FM-1, on CoreMIDI's thread
+            let parsed = fromKeys ? Receiver.notes(list) : receiver.parse(list)
             if parsed.sysex.isEmpty && parsed.notes.isEmpty { return }
             Task { @MainActor [weak self] in self?.take(parsed) }
         }
-        MIDIOutputPortCreate(client, "to FM-1" as CFString, &outPort)
         scan()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -81,27 +91,47 @@ final class Mirror: ObservableObject {
         return [device, entity, endpoint].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
-    private func scan() {
+    /// Which source a message came from (MIDIPortConnectSource's refCon).
+    nonisolated(unsafe) static let fm1Tag = UnsafeMutableRawPointer(bitPattern: 1)
+    nonisolated(unsafe) static let keysTag = UnsafeMutableRawPointer(bitPattern: 2)
+
+    private func scan(force: Bool = false) {
         var src: [MIDIEndpointRef] = [], dst: [MIDIEndpointRef] = [], found = ""
+        var keyNames: [String] = [], keyEnds: [MIDIEndpointRef] = []
         for i in 0..<MIDIGetNumberOfSources() {
             let e = MIDIGetSource(i)
             let n = Mirror.name(e)
-            if Codec.isFm1(n) { src.append(e); if found.isEmpty { found = n } }
+            if Codec.isFm1(n) {
+                src.append(e); if found.isEmpty { found = n }
+            } else if !n.isEmpty && !keyNames.contains(n) {
+                keyNames.append(n); keyEnds.append(e)
+            }
+        }
+        // the keyboard: the one chosen, or with "auto" the first there is
+        let pick = keysChoice == "off" ? nil : keysChoice == "auto" ? keyEnds.first
+            : keyNames.firstIndex(of: keysChoice).map { keyEnds[$0] }
+        keyboards = keyNames
+        if pick ?? 0 != keysSource {
+            if keysSource != 0 { MIDIPortDisconnectSource(inPort, keysSource) }
+            keysSource = pick ?? 0
+            if keysSource != 0 { MIDIPortConnectSource(inPort, keysSource, Mirror.keysTag) }
+            keyboard = pick.map { keyNames[keyEnds.firstIndex(of: $0)!] }
         }
         for i in 0..<MIDIGetNumberOfDestinations() {
             let e = MIDIGetDestination(i)
             if Codec.isFm1(Mirror.name(e)) { dst.append(e) }
         }
+        bridge.setTargets(dst)
         #if DEBUG
         print("scan: \(MIDIGetNumberOfSources()) sources, \(MIDIGetNumberOfDestinations()) destinations; FM-1:",
               src.count, dst.count, found)
         #endif
-        if src == sources && dst == destinations { return }
+        if src == sources && dst == destinations && !force { return }
         #if DEBUG
         if portName == "FM1 Demo" { return }
         #endif
         for e in sources { MIDIPortDisconnectSource(inPort, e) }
-        for e in src { MIDIPortConnectSource(inPort, e, nil) }
+        for e in src { MIDIPortConnectSource(inPort, e, Mirror.fm1Tag) }
         sources = src
         destinations = dst
         portName = found
@@ -119,19 +149,20 @@ final class Mirror: ObservableObject {
 
     private func send(_ bytes: [UInt8]) {
         for d in destinations {
-            var request = bytes
-            request.withUnsafeMutableBufferPointer { buf in
-                // MIDISendSysex copies nothing: keep the bytes alive until it's done (it's short).
-                let data = UnsafeMutablePointer<UInt8>.allocate(capacity: buf.count)
-                data.initialize(from: buf.baseAddress!, count: buf.count)
-                let req = UnsafeMutablePointer<MIDISysexSendRequest>.allocate(capacity: 1)
-                req.initialize(to: MIDISysexSendRequest(destination: d, data: UnsafePointer(data),
-                                                        bytesToSend: UInt32(buf.count), complete: false,
-                                                        reserved: (0, 0, 0), completionProc: { r in
-                    r.pointee.data.deallocate()
-                    r.deallocate()
-                }, completionRefCon: nil))
-                MIDISendSysex(req)
+            // MIDISendSysex sends from our buffer and moves `data` along as it goes: the buffer (kept in the
+            // request's refCon) and the request are freed when it's done, not before.
+            let data = UnsafeMutablePointer<UInt8>.allocate(capacity: bytes.count)
+            data.initialize(from: bytes, count: bytes.count)
+            let req = UnsafeMutablePointer<MIDISysexSendRequest>.allocate(capacity: 1)
+            req.initialize(to: MIDISysexSendRequest(destination: d, data: UnsafePointer(data),
+                                                    bytesToSend: UInt32(bytes.count), complete: false,
+                                                    reserved: (0, 0, 0), completionProc: { r in
+                r.pointee.completionRefCon?.assumingMemoryBound(to: UInt8.self).deallocate()
+                r.deallocate()
+            }, completionRefCon: UnsafeMutableRawPointer(data)))
+            if MIDISendSysex(req) != noErr {
+                data.deallocate()
+                req.deallocate()
             }
         }
     }
@@ -142,9 +173,6 @@ final class Mirror: ObservableObject {
         send(helloCount == 0 ? Codec.helloAll : Codec.hello)
         helloCount += 1
         if !asked { asked = true; send(Codec.askInfo) }
-        if case .showing = state, Date().timeIntervalSince(lastRow) > 4 {
-            state = .waiting(portName)                 // it stopped sending: another firmware, or asleep
-        }
     }
 
     // ---- what comes in
@@ -153,7 +181,6 @@ final class Mirror: ObservableObject {
         for m in p.sysex {
             if Codec.apply(&pixels, m) {
                 dirty = true
-                lastRow = Date()
                 if case .showing = state {} else { state = .showing(portName) }
             } else if let s = Codec.sound(m) {
                 sound = s.isEmpty ? nil : s
@@ -234,20 +261,57 @@ final class Mirror: ObservableObject {
         }
     }
 
+    /// One Core Image context for every frame (they're costly to make).
+    nonisolated private static let ci = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// The picture in the chosen look; with Smooth, 4 times bigger with Lanczos and a light unsharp mask, which keeps
+    /// letters crisp and smooth (Erik37 and others dither their screens: Scale2x made stairs of the dots).
     nonisolated static func render(_ pixels: [UInt16], _ look: Codec.Look, _ smooth: Bool) -> CGImage? {
-        var argb = pixels.map { look.paint($0) }
-        var size = Codec.size
-        if smooth {
-            argb = Codec.smooth(argb, size)
-            size *= Codec.smoothScale
-        }
-        return argb.withUnsafeBytes { raw -> CGImage? in
+        let argb = pixels.map { look.paint($0) }
+        let size = Codec.size
+        let plain: CGImage? = argb.withUnsafeBytes { raw -> CGImage? in
             guard let provider = CGDataProvider(data: Data(raw) as CFData) else { return nil }
             return CGImage(width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: size * 4,
                            space: CGColorSpaceCreateDeviceRGB(),
                            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue
                                                     | CGBitmapInfo.byteOrder32Little.rawValue),
                            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+        }
+        guard smooth, let plain else { return plain }
+        let scale = CGFloat(Codec.smoothScale)
+        let big = CIImage(cgImage: plain).clampedToExtent()
+            .applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1])
+            .applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 2.0, kCIInputIntensityKey: 0.8])
+        let out = CGRect(x: 0, y: 0, width: CGFloat(size) * scale, height: CGFloat(size) * scale)
+        return ci.createCGImage(big, from: out)
+    }
+}
+
+/// The keyboard to the FM-1: its notes and controls (MIDI 1.0 channel voice messages), on channel 1, where the FM-1
+/// listens, whatever channel the keyboard sends on. Runs on CoreMIDI's thread, so nothing waits on the screen.
+final class Bridge: @unchecked Sendable {
+    private let lock = NSLock()
+    private var targets: [MIDIEndpointRef] = []
+    var outPort = MIDIPortRef()
+
+    func setTargets(_ t: [MIDIEndpointRef]) { lock.lock(); targets = t; lock.unlock() }
+
+    func forward(_ list: UnsafePointer<MIDIEventList>) {
+        lock.lock(); let t = targets; lock.unlock()
+        guard !t.isEmpty else { return }
+        var words: [UInt32] = []
+        Receiver.eachWord(list) { w in
+            if w >> 28 == 0x2 { words.append(w & 0xFFF0_FFFF) }     // channel voice: channel 1 (its low nibble 0)
+        }
+        guard !words.isEmpty else { return }
+        var i = 0
+        while i < words.count {                                       // a packet holds up to 64 words
+            let chunk = Array(words[i..<min(i + 60, words.count)])
+            var out = MIDIEventList()
+            let packet = MIDIEventListInit(&out, ._1_0)
+            _ = chunk.withUnsafeBufferPointer { MIDIEventListAdd(&out, MemoryLayout<MIDIEventList>.size, packet, 0, $0.count, $0.baseAddress!) }
+            for d in t { MIDISendEventList(outPort, d, &out) }
+            i += 60
         }
     }
 }
@@ -261,6 +325,28 @@ final class Receiver: @unchecked Sendable {
     }
 
     private var part: [UInt8] = []
+
+    /// Every 32-bit word of every packet.
+    static func eachWord(_ list: UnsafePointer<MIDIEventList>, _ body: (UInt32) -> Void) {
+        let offset = MemoryLayout<MIDIEventPacket>.offset(of: \MIDIEventPacket.words)!
+        for packet in list.unsafeSequence() {
+            let n = Int(packet.pointee.wordCount)
+            let w = UnsafeBufferPointer(start: (UnsafeRawPointer(packet) + offset).assumingMemoryBound(to: UInt32.self), count: n)
+            for x in w { body(x) }
+        }
+    }
+
+    /// Only the notes (the keyboard's: nothing else is needed from it).
+    static func notes(_ list: UnsafePointer<MIDIEventList>) -> Parsed {
+        var out = Parsed()
+        eachWord(list) { w in
+            guard w >> 28 == 0x2 else { return }
+            let status = (w >> 16) & 0xF0, d1 = Int((w >> 8) & 0x7F), d2 = Int(w & 0x7F)
+            if status == 0x90 { out.notes.append((d1, d2)) }
+            if status == 0x80 { out.notes.append((d1, 0)) }
+        }
+        return out
+    }
 
     func parse(_ list: UnsafePointer<MIDIEventList>) -> Parsed {
         var out = Parsed()

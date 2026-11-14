@@ -37,13 +37,13 @@ struct Spyglass: View {
                     detail = String(format: "%@   %.1f Hz", NoteNames.name(n), NoteNames.hz(n))
                         + (velocity > 0 ? "   vel \(velocity)" : "")
                 }
-                label(&c, name, cx, cy - d * 0.215, chord != nil ? d * 0.10 : d * 0.115, d * 0.72, .white)
+                label(&c, name, cx, cy - d * 0.215, chord != nil ? d * 0.11 : d * 0.13, d * 0.72, .white)
             } else {
                 name = ""
                 detail = idle
             }
             _ = name
-            label(&c, detail, cx, cy + d * 0.365, max(12, d * 0.055), d * 0.54, .white)
+            label(&c, detail, cx, cy + d * 0.365, max(14, d * 0.062), d * 0.6, .white)
             if chord == nil, notes?.isEmpty == false, velocity > 0 {
                 let w = d * 0.26, h = max(3, d * 0.012), top = cy + d * 0.405 - h / 2
                 c.fill(Path(roundedRect: CGRect(x: cx - w / 2, y: top, width: w, height: h), cornerRadius: h / 2),
@@ -54,24 +54,31 @@ struct Spyglass: View {
         }
     }
 
-    /// Text centred on (x, y), smaller if it wouldn't fit in `room`.
+    /// Text centred on (x, y), smaller if it wouldn't fit in `room`: bold, rounded, with a thin dark outline so it
+    /// stays crisp over the glass.
     private func label(_ c: inout GraphicsContext, _ s: String, _ x: CGFloat, _ y: CGFloat, _ size: CGFloat,
                        _ room: CGFloat, _ color: Color) {
-        var t = c.resolve(Text(s).font(.system(size: size, weight: .semibold)).foregroundColor(color))
-        let w = t.measure(in: CGSize(width: 10_000, height: 1_000)).width
-        if w > room {
-            t = c.resolve(Text(s).font(.system(size: size * room / w, weight: .semibold)).foregroundColor(color))
+        func text(_ px: CGFloat, _ col: Color) -> Text {
+            Text(s).font(.system(size: px, weight: .bold, design: .rounded)).monospacedDigit().foregroundColor(col)
         }
-        c.draw(t, at: CGPoint(x: x, y: y), anchor: .center)
+        var px = size
+        let w = c.resolve(text(px, color)).measure(in: CGSize(width: 10_000, height: 1_000)).width
+        if w > room { px *= room / w }
+        let shadow = c.resolve(text(px, .black.opacity(0.85)))
+        let o = max(1, px * 0.05)
+        for (dx, dy) in [(-o, 0), (o, 0), (0, -o), (0, o)] {
+            c.draw(shadow, at: CGPoint(x: x + dx, y: y + dy), anchor: .center)
+        }
+        c.draw(c.resolve(text(px, color)), at: CGPoint(x: x, y: y), anchor: .center)
     }
 
     /// The sound's name: warm gold letters on a band of dark smoked glass with a thin brass edge and a soft shine.
     private func soundBand(_ c: inout GraphicsContext, _ s: String, _ x: CGFloat, _ y: CGFloat, _ d: CGFloat) {
         let str = "♪  " + s
-        var size = max(12, d * 0.06)
+        var size = max(13, d * 0.065)
         let room = d * 0.5
         func text(_ color: Color) -> Text {
-            Text(str).font(.system(size: size, weight: .semibold)).kerning(size * 0.06).foregroundColor(color)
+            Text(str).font(.system(size: size, weight: .bold, design: .rounded)).kerning(size * 0.05).foregroundColor(color)
         }
         var w = c.resolve(text(Spyglass.soundGold)).measure(in: CGSize(width: 10_000, height: 1_000)).width
         if w > room {
@@ -165,10 +172,10 @@ enum Staff {
             }
             c.fill(p, with: .color(.white), style: FillStyle(eoFill: true))
         }
-        let grey = Color(white: 170 / 255)
+        let grey = Color(white: 0.82)
         for i in 0..<5 {
-            line(0.2, -CGFloat(i), width - 0.2, -CGFloat(i), 0.12, grey)
-            line(0.2, gap + CGFloat(i), width - 0.2, gap + CGFloat(i), 0.12, grey)
+            line(0.2, -CGFloat(i), width - 0.2, -CGFloat(i), 0.14, grey)
+            line(0.2, gap + CGFloat(i), width - 0.2, gap + CGFloat(i), 0.14, grey)
         }
         line(0.2, -4, 0.2, gap + 4, 0.16, grey)                  // the brace line joining the staves
         glyph(StaffGlyphs.gClef, 0.7, 0)

@@ -22,8 +22,10 @@ The iOS sibling of [FM-1 Mirror](https://github.com/pfkellogg/fm1-mirror) (Mac, 
 ## Using it
 
 The screen and the spyglass sit side by side (landscape) or one above the other (portrait). The bar has
-**Bluetooth**, the **look** (Color, Bright color, Yellow on black, White on black, Black on white), **Smooth** (takes the
-jagged edges off) and **Spyglass** (shows or hides it).
+**Bluetooth**, **Keys** (a USB keyboard that plays the FM-1 through the iPad or iPhone, on channel 1: Auto takes the
+first one there is), the **look** (Color, Bright color, Yellow on black, White on black, Black on white), **Smooth**
+(4 times bigger with Lanczos and a light sharpening: smooth, crisp letters) and **Spyglass** (shows or hides it). The
+spyglass follows the keyboard and the FM-1's own keys.
 
 ## Building
 
@@ -31,10 +33,11 @@ jagged edges off) and **Spyglass** (shows or hides it).
     xcodegen generate
     open FM1Mirror.xcodeproj
 
-`project.yml` is the project; `Sources/` the app (SwiftUI, CoreMIDI). A test build started with `-demo` plays a
-recording of a real FM-1 (Erik37 + Big Screen, `Resources/Demo/erik37.syx`) so the screen and the spyglass can be
-checked in the simulator, which can't see USB or Bluetooth MIDI devices. `tools/glyphs_to_swift.py` makes
+`project.yml` is the project; `Sources/` the app (SwiftUI, CoreMIDI). The simulator can't see USB or Bluetooth MIDI
+devices, so test builds have two demos with a recording of a real FM-1 (Erik37 + Big Screen,
+`Resources/Demo/erik37.syx`): `-demo` plays it straight into the mirror; `-demo-midi` makes a pretend FM-1 and a
+pretend keyboard (virtual MIDI ports) so the whole CoreMIDI path runs, the keyboard bridge too. A look can be set
+from the command line: `-look "Yellow on black"`. `tools/glyphs_to_swift.py` makes
 `Sources/StaffGlyphs.swift` (Noto Music outlines, SIL OFL) from the Android app's StaffGlyphs.java.
 
-Not yet in this version: playing the FM-1 from a USB keyboard through the iPad, the waveform, and installing Big
-Screen.
+Not yet in this version: the waveform, and installing Big Screen.
