@@ -1,0 +1,5 @@
+build/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+FM1Mirror.xcodeproj/
