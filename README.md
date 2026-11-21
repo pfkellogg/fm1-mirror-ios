@@ -1,4 +1,6 @@
-# FM-1 Mirror for iPad and iPhone
+# FM-1 Big Screen for iPad and iPhone
+
+*Formerly called FM-1 Mirror: same app, new name.*
 
 ☕ If this helps you make music, you can [buy me a coffee on Ko-fi](https://ko-fi.com/aikellogg).
 
@@ -6,12 +8,12 @@ The M-VAVE FM-1's tiny 1.54-inch screen, **big on an iPad or iPhone**, live, ove
 **spyglass**: the note or chord you play on the FM-1's keys, its pitch to one decimal, the notes on a grand staff, how
 hard you hit the key, and the sound playing.
 
-The iOS sibling of [FM-1 Mirror](https://github.com/pfkellogg/fm1-mirror) (Mac, Windows, Linux) and
-[FM-1 Mirror + Spyglass](https://github.com/pfkellogg/fm1-mirror-spyglass-android) (Android), and the same messages.
+The iOS sibling of [FM-1 Big Screen](https://github.com/pfkellogg/fm1-mirror) (Mac, Windows, Linux) and
+[FM-1 Big Screen + Spyglass](https://github.com/pfkellogg/fm1-mirror-spyglass-android) (Android), and the same messages.
 
 ## What you need
 
-- An FM-1 running a **Big Screen** firmware (see FM-1 Mirror's README). The spyglass works with any firmware.
+- An FM-1 running a **Big Screen** firmware (see FM-1 Big Screen's README). The spyglass works with any firmware.
 - **USB:** an iPad or iPhone with USB-C and a USB-C cable, or, with Lightning, Apple's *Lightning to USB 3 Camera
   Adapter* (the one with a charging port).
 - **Bluetooth:** tap **Bluetooth** and connect the FM-1 (for example *FM1 Community_BLE*) on Apple's Bluetooth MIDI

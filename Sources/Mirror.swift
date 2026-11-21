@@ -51,7 +51,7 @@ final class Mirror: ObservableObject {
     private var pairTimer: Timer?
 
     init() {
-        MIDIClientCreateWithBlock("FM-1 Mirror" as CFString, &client) { [weak self] _ in
+        MIDIClientCreateWithBlock("FM-1 Big Screen" as CFString, &client) { [weak self] _ in
             Task { @MainActor in self?.scan() }       // something was plugged in, paired or let go
         }
         let receiver = Receiver(), bridge = self.bridge

@@ -77,7 +77,7 @@ struct ContentView: View {
             case .waiting(let name):
                 Text("FM-1 found").font(.largeTitle.bold()).foregroundColor(Spyglass.brassLight)
                 Text("\(name)\(mirror.firmware.map { " · \($0)" } ?? "")").foregroundColor(.secondary)
-                Text("It isn't sending its screen. That needs a Big Screen firmware on the FM-1 (see FM-1 Mirror's page on GitHub). The spyglass works with any firmware.")
+                Text("It isn't sending its screen. That needs a Big Screen firmware on the FM-1 (see FM-1 Big Screen's page on GitHub). The spyglass works with any firmware.")
                     .multilineTextAlignment(.center)
             case .showing:
                 ProgressView()
