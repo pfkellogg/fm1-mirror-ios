@@ -13,7 +13,7 @@ The iOS sibling of [FM-1 Big Screen](https://github.com/pfkellogg/fm1-mirror) (M
 
 ## What you need
 
-- An FM-1 running a **Big Screen** firmware (see FM-1 Big Screen's README). The spyglass works with any firmware.
+- An FM-1 running a **Big Screen** firmware (see FM-1 Big Screen's README), or firmware built on Charles Vestal's fm1-base with its own mirror turned on (Polly, LOOM-8 and others), which the app understands too. The spyglass works with any firmware.
 - **USB:** an iPad or iPhone with USB-C and a USB-C cable, or, with Lightning, Apple's *Lightning to USB 3 Camera
   Adapter* (the one with a charging port).
 - **Bluetooth:** tap **Bluetooth** and connect the FM-1 (for example *FM1 Community_BLE*) on Apple's Bluetooth MIDI
