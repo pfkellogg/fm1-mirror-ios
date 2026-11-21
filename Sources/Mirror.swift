@@ -43,6 +43,8 @@ final class Mirror: ObservableObject {
     private var destinations: [MIDIEndpointRef] = []
     private var portName = ""
     private var helloCount = 0
+    /// Charles Vestal's mirror (Fm1Base: fm1-base firmware with mirror = true): it answered, so it's kept on.
+    private var baseOn = false
     private var asked = false
     private var timer: Timer?
     private var frameTimer: Timer?
@@ -137,6 +139,7 @@ final class Mirror: ObservableObject {
         portName = found
         helloCount = 0
         asked = false
+        baseOn = false
         if src.isEmpty || dst.isEmpty {
             state = .noFm1
             firmware = nil
@@ -171,6 +174,13 @@ final class Mirror: ObservableObject {
     private func tick() {
         guard !destinations.isEmpty else { return }
         send(helloCount == 0 ? Codec.helloAll : Codec.hello)
+        // Charles Vestal's mirror: asked at 1, 5 and 6 s (clear of the name question); once it answers, kept on
+        // every 2 s (it stops after 6).
+        if baseOn {
+            if helloCount % 2 == 0 { send(Fm1Base.ask(1)) }
+        } else if [1, 5, 6].contains(helloCount) {
+            send(Fm1Base.ask(2))
+        }
         helloCount += 1
         if !asked { asked = true; send(Codec.askInfo) }
     }
@@ -182,6 +192,13 @@ final class Mirror: ObservableObject {
             if Codec.apply(&pixels, m) {
                 dirty = true
                 if case .showing = state {} else { state = .showing(portName) }
+            } else if case let got = Fm1Base.apply(&pixels, m), got != .nothing {
+                if got == .hello {
+                    baseOn = true
+                } else {
+                    dirty = true
+                    if case .showing = state {} else { state = .showing(portName) }
+                }
             } else if let s = Codec.sound(m) {
                 sound = s.isEmpty ? nil : s
             } else if let info = Codec.firmwareInfo(m) {
