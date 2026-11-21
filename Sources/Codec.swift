@@ -97,6 +97,48 @@ enum Codec {
             }
         }
 
+        /// The whole screen in this look. Bright color lifts only thin things on a dark background (text, lines): what
+        /// lies in or next to a filled area (a picture, a panel, a dotted background) keeps its own colours, so a
+        /// firmware's pictures (Erik37's piano) aren't washed out.
+        func paintAll(_ px: [UInt16], side: Int) -> [UInt32] {
+            guard self == .bright else { return px.map { paint($0) } }
+            let near = Look.pictureMask(px, side: side)
+            return px.indices.map { near[$0] ? Look.color.paint(px[$0]) : paint(px[$0]) }
+        }
+
+        /// Within 4 pixels of a spot whose 9x9 neighbourhood is more than 60% drawn (anything brighter than the black
+        /// background, dark dotted shading included). Text strokes on black never get that full.
+        static func pictureMask(_ px: [UInt16], side: Int) -> [Bool] {
+            let ink = px.map { c -> Int in
+                let (r, g, b) = Codec.rgb(c)
+                return 0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b) > 0.03 * 255 ? 1 : 0
+            }
+            let first = window(ink, side: side)
+            let core = first.map { $0.count * 10 > $0.area * 6 ? 1 : 0 }
+            return window(core, side: side).map { $0.count > 0 }
+        }
+
+        /// Counts of v in each pixel's 9x9 neighbourhood (clipped at the edges), by a summed-area table.
+        private static func window(_ v: [Int], side: Int) -> [(count: Int, area: Int)] {
+            let r = 4, w = side + 1
+            var sat = [Int](repeating: 0, count: w * w)
+            for y in 0..<side {
+                for x in 0..<side {
+                    sat[(y + 1) * w + x + 1] = v[y * side + x] + sat[y * w + x + 1] + sat[(y + 1) * w + x] - sat[y * w + x]
+                }
+            }
+            var out = [(count: Int, area: Int)]()
+            out.reserveCapacity(side * side)
+            for y in 0..<side {
+                let y0 = max(0, y - r), y1 = min(side, y + r + 1)
+                for x in 0..<side {
+                    let x0 = max(0, x - r), x1 = min(side, x + r + 1)
+                    out.append((sat[y1 * w + x1] + sat[y0 * w + x0] - sat[y0 * w + x1] - sat[y1 * w + x0], (y1 - y0) * (x1 - x0)))
+                }
+            }
+            return out
+        }
+
         private static func bright(_ v: Int) -> Int { Int(min(255, Double(v) * 1.6)) }
 
         /// Any colour that isn't the black background up to at least 80% brightness, keeping its hue.

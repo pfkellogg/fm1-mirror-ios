@@ -267,7 +267,7 @@ final class Mirror: ObservableObject {
     /// The picture in the chosen look; with Smooth, 4 times bigger with Lanczos and a light unsharp mask, which keeps
     /// letters crisp and smooth (Erik37 and others dither their screens: Scale2x made stairs of the dots).
     nonisolated static func render(_ pixels: [UInt16], _ look: Codec.Look, _ smooth: Bool) -> CGImage? {
-        let argb = pixels.map { look.paint($0) }
+        let argb = look.paintAll(pixels, side: Codec.size)
         let size = Codec.size
         let plain: CGImage? = argb.withUnsafeBytes { raw -> CGImage? in
             guard let provider = CGDataProvider(data: Data(raw) as CFData) else { return nil }
